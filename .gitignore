@@ -1,3 +1,4 @@
 shellforge
+src/main
 *.o
 *.out
