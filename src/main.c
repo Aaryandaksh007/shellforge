@@ -1,37 +1,60 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+#include "parser.h"
+#include "expand.h"
+
+#define INPUT_SIZE 1024
 
 int main(void)
 {
-    char command[100];
-    char *argv[10];
+    char input[INPUT_SIZE];
 
-    printf("shellforge$ ");
+    printf("=================================\n");
+    printf("        ShellForge v0.2\n");
+    printf("     Parser + Expansion Engine\n");
+    printf("=================================\n");
 
-    fgets(command, sizeof(command), stdin);
+    while (1) {
 
-    command[strcspn(command, "\n")] = '\0';
+        printf("shellforge> ");
+        fflush(stdout);
 
-    int argc = 0;
+        if (fgets(input, sizeof(input), stdin) == NULL) {
+            printf("\n");
+            break;
+        }
 
-    char *token = strtok(command, " ");
+        if (strcmp(input, "\n") == 0)
+            continue;
 
-    while (token != NULL && argc < 9)
-    {
-        argv[argc] = token;
-        argc++;
+        if (strncmp(input, "exit", 4) == 0 &&
+            (input[4] == '\n' || input[4] == '\0')) {
+            break;
+        }
 
-        token = strtok(NULL, " ");
+        Command *cmd = parse_command(input);
+
+        if (cmd == NULL)
+            continue;
+
+        expand_command(cmd);
+
+        printf("\nParsed command:\n");
+
+        for (int i = 0; i < cmd->argc; i++) {
+            printf("  argv[%d] = \"%s\"\n",
+                   i,
+                   cmd->argv[i]);
+        }
+
+        printf("\n");
+
+        free_command(cmd);
     }
 
-    argv[argc] = NULL;
-
-    printf("\nTokens:\n");
-
-    for (int i = 0; argv[i] != NULL; i++)
-    {
-        printf("argv[%d] = \"%s\"\n", i, argv[i]);
-    }
+    printf("ShellForge terminated.\n");
 
     return 0;
 }
