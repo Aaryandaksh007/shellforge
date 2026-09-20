@@ -6,32 +6,65 @@
 
 #include "parser.h"
 
+static char *duplicate_string(const char *src)
+{
+    size_t len = strlen(src) + 1;
+
+    char *copy = malloc(len);
+
+    if (copy == NULL)
+        return NULL;
+
+    memcpy(copy, src, len);
+
+    return copy;
+}
+
 Command *parse_command(char *input)
 {
-    Command *cmd = malloc(sizeof(Command));
+    Command *cmd = calloc(1, sizeof(Command));
 
     if (cmd == NULL) {
-        perror("malloc");
+        perror("calloc");
         return NULL;
     }
 
-    cmd->argc = 0;
+    char *p = input;
 
-    char *token = strtok(input, " \t\n");
+    while (*p != '\0' && cmd->argc < MAX_ARGS - 1) {
 
-    while (token != NULL && cmd->argc < MAX_ARGS - 1) {
+        /* Skip whitespace */
+        while (*p == ' ' || *p == '\t' || *p == '\n')
+            p++;
 
-        cmd->argv[cmd->argc] = strdup(token);
+        if (*p == '\0')
+            break;
 
-        if (cmd->argv[cmd->argc] == NULL) {
-            perror("strdup");
+        char *start = p;
+
+        /* Find end of token */
+        while (*p != '\0' &&
+               *p != ' ' &&
+               *p != '\t' &&
+               *p != '\n') {
+            p++;
+        }
+
+        size_t len = (size_t)(p - start);
+
+        char *token = malloc(len + 1);
+
+        if (token == NULL) {
+            perror("malloc");
             free_command(cmd);
             return NULL;
         }
 
-        cmd->argc++;
+        memcpy(token, start, len);
+        token[len] = '\0';
 
-        token = strtok(NULL, " \t\n");
+        cmd->argv[cmd->argc] = token;
+        cmd->argc++;
     }
 
     cmd->argv[cmd->argc] = NULL;
@@ -44,9 +77,61 @@ void free_command(Command *cmd)
     if (cmd == NULL)
         return;
 
-    for (int i = 0; i < cmd->argc; i++) {
+    for (int i = 0; i < cmd->argc; i++)
         free(cmd->argv[i]);
-    }
 
     free(cmd);
+}
+
+Pipeline *parse_pipeline(char *input)
+{
+    Pipeline *pipeline = calloc(1, sizeof(Pipeline));
+
+    if (pipeline == NULL) {
+        perror("calloc");
+        return NULL;
+    }
+
+    char *start = input;
+
+    while (*start != '\0' &&
+           pipeline->count < MAX_COMMANDS) {
+
+        char *end = strchr(start, '|');
+
+        if (end != NULL)
+            *end = '\0';
+
+        Command *cmd = parse_command(start);
+
+        if (cmd == NULL) {
+            free_pipeline(pipeline);
+            return NULL;
+        }
+
+        if (cmd->argc > 0) {
+            pipeline->commands[pipeline->count] = cmd;
+            pipeline->count++;
+        } else {
+            free_command(cmd);
+        }
+
+        if (end == NULL)
+            break;
+
+        start = end + 1;
+    }
+
+    return pipeline;
+}
+
+void free_pipeline(Pipeline *pipeline)
+{
+    if (pipeline == NULL)
+        return;
+
+    for (int i = 0; i < pipeline->count; i++)
+        free_command(pipeline->commands[i]);
+
+    free(pipeline);
 }

@@ -1,9 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 #include "parser.h"
-#include "expand.h"
+#include "executor.h"
 
 #define INPUT_SIZE 1024
 
@@ -12,8 +11,8 @@ int main(void)
     char input[INPUT_SIZE];
 
     printf("=================================\n");
-    printf("        ShellForge v0.2\n");
-    printf("     Parser + Expansion Engine\n");
+    printf("        ShellForge v0.5\n");
+    printf("        Pipeline Engine\n");
     printf("=================================\n");
 
     while (1) {
@@ -26,35 +25,23 @@ int main(void)
             break;
         }
 
-        if (strcmp(input, "\n") == 0)
+        if (input[0] == '\n')
             continue;
 
-        if (strncmp(input, "exit", 4) == 0 &&
-            (input[4] == '\n' || input[4] == '\0')) {
-            break;
-        }
+        Pipeline *pipeline = parse_pipeline(input);
 
-        Command *cmd = parse_command(input);
-
-        if (cmd == NULL)
+        if (pipeline == NULL)
             continue;
 
-        expand_command(cmd);
-
-        printf("\nParsed command:\n");
-
-        for (int i = 0; i < cmd->argc; i++) {
-            printf("  argv[%d] = \"%s\"\n",
-                   i,
-                   cmd->argv[i]);
+        if (pipeline->count == 0) {
+            free_pipeline(pipeline);
+            continue;
         }
 
-        printf("\n");
+        execute_pipeline(pipeline);
 
-        free_command(cmd);
+        free_pipeline(pipeline);
     }
-
-    printf("ShellForge terminated.\n");
 
     return 0;
 }
