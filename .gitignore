@@ -1,3 +1,22 @@
+# Compiled executables
 shellforge
+fd_demo
+memory_layout
+pipe_demo
+pipeline_demo
+thread_demo
+pagesim
+
+# Object files
 *.o
-*.out
+
+# Generated output
+fd_output.txt
+ls
+
+# Backups
+*.bak
+*.pre*
+*.before-*
+core
+core.*

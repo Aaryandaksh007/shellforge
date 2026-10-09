@@ -7,6 +7,7 @@
 typedef struct {
     char *argv[MAX_ARGS];
     int argc;
+    int background;
 } Command;
 
 typedef struct {

@@ -6,19 +6,7 @@
 
 #include "parser.h"
 
-static char *duplicate_string(const char *src)
-{
-    size_t len = strlen(src) + 1;
 
-    char *copy = malloc(len);
-
-    if (copy == NULL)
-        return NULL;
-
-    memcpy(copy, src, len);
-
-    return copy;
-}
 
 Command *parse_command(char *input)
 {
@@ -67,7 +55,18 @@ Command *parse_command(char *input)
         cmd->argc++;
     }
 
-    cmd->argv[cmd->argc] = NULL;
+        cmd->argv[cmd->argc] = NULL;
+
+    if (cmd->argc > 0 &&
+        strcmp(cmd->argv[cmd->argc - 1], "&") == 0) {
+
+        free(cmd->argv[cmd->argc - 1]);
+
+        cmd->argv[cmd->argc - 1] = NULL;
+        cmd->argc--;
+
+        cmd->background = 1;
+    }
 
     return cmd;
 }

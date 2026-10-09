@@ -1,0 +1,23 @@
+
+PageSim Algorithm Comparison
+Frames: 3 | References: 9
+Algorithm       Hits    Faults   Hit Ratio
+------------------------------------------
+FIFO               3         6      33.33%
+LRU                3         6      33.33%
+LFU                3         6      33.33%
+Clock              3         6      33.33%
+Hybrid             4         5      44.44%
+Optimal            4         5      44.44%
+Lowest fault count: Hybrid, Optimal (5 faults)
+
+
+FIFO Belady Anomaly Test
+Reference: 1 2 3 4 1 2 5 1 2 3 4 5
+Frames   Faults       Hits    
+1        12           0       
+2        12           0       
+3        9            3       
+4        10           2       
+Belady anomaly: faults increased at 4 frames.
+
