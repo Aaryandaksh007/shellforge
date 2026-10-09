@@ -5,7 +5,7 @@ memory_layout
 pipe_demo
 pipeline_demo
 thread_demo
-pagesim
+/pagesim
 
 # Object files
 *.o
