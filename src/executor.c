@@ -14,7 +14,6 @@
 #include "jobs.h"
 #include "pagesim.h"
 
-
 /*
  * ============================================================
  * BUILTIN CHECK
@@ -36,7 +35,6 @@ static int is_builtin(Command *cmd)
            strcmp(cmd->argv[0], "exit") == 0;
 }
 
-
 /*
  * ============================================================
  * SIGNAL HANDLING
@@ -52,7 +50,6 @@ static void restore_child_signals(void)
     signal(SIGTTOU, SIG_DFL);
 }
 
-
 /*
  * ============================================================
  * TERMINAL CONTROL
@@ -66,7 +63,6 @@ static void give_terminal_to_shell(void)
     if (tcsetpgrp(STDIN_FILENO, shell_pgid) == -1)
         perror("shellforge: tcsetpgrp");
 }
-
 
 /*
  * ============================================================
@@ -95,7 +91,6 @@ static void run_foreground_job(int job_id)
      * Resume stopped job.
      */
     if (job->state == JOB_STOPPED) {
-
         if (kill(-job->pgid, SIGCONT) == -1) {
             perror("fg: SIGCONT");
             give_terminal_to_shell();
@@ -110,11 +105,9 @@ static void run_foreground_job(int job_id)
     /*
      * Wait for the process group.
      *
-     * WUNTRACED is essential:
-     * it tells us when Ctrl+Z stops the job.
+     * WUNTRACED detects Ctrl+Z.
      */
     while (1) {
-
         pid_t result = waitpid(
             -job->pgid,
             &status,
@@ -122,7 +115,6 @@ static void run_foreground_job(int job_id)
         );
 
         if (result == -1) {
-
             if (errno == EINTR)
                 continue;
 
@@ -134,10 +126,9 @@ static void run_foreground_job(int job_id)
         }
 
         /*
-         * Ctrl+Z
+         * Job stopped.
          */
         if (WIFSTOPPED(status)) {
-
             job->state = JOB_STOPPED;
 
             printf(
@@ -146,11 +137,7 @@ static void run_foreground_job(int job_id)
                 job->command
             );
 
-            /*
-             * Return terminal ownership to ShellForge.
-             */
             give_terminal_to_shell();
-
             return;
         }
 
@@ -158,11 +145,6 @@ static void run_foreground_job(int job_id)
          * Child terminated.
          */
         if (WIFEXITED(status) || WIFSIGNALED(status)) {
-
-            /*
-             * Check whether other members of the
-             * process group still exist.
-             */
             pid_t remaining;
 
             do {
@@ -174,7 +156,6 @@ static void run_foreground_job(int job_id)
 
                 if (remaining > 0 &&
                     WIFSTOPPED(status)) {
-
                     job->state = JOB_STOPPED;
 
                     printf(
@@ -186,75 +167,80 @@ static void run_foreground_job(int job_id)
                     give_terminal_to_shell();
                     return;
                 }
-
             } while (remaining > 0);
 
             job->state = JOB_DONE;
-
             break;
         }
     }
 
-    /*
-     * Always return terminal ownership.
-     */
     give_terminal_to_shell();
 }
-
 
 /*
  * ============================================================
  * PAGESIM BUILTIN
  * ============================================================
  *
- * Usage:
+ * Supported examples:
  *
  * pagesim
- *
- * pagesim --frames 3 --algo fifo --ref "1 2 3 1 4 2 5"
- *
- * Supported algorithms depend on pagesim.c.
+ * pagesim --frames 3 --algo fifo --ref "1 2 3 1 4"
+ * pagesim --frames 3 --algo fifo --trace traces/basic.txt
+ * pagesim --algo working-set --window 3 --trace traces/basic.txt
+ * pagesim --frames 3 --algo compare --trace traces/basic.txt
+ * pagesim --frames 4 --algo anomaly --trace traces/basic.txt
  */
 
 static void run_pagesim(Command *cmd)
 {
     int frames = 3;
-    const char *algo = "fifo";
+    int window_size = 3;
 
-    /*
-     * Default reference string.
-     */
-    char ref[4096] =
-        "1 2 3 1 4 2 5 1 2 3 4";
+    const char *algo = "fifo";
+    const char *trace_path = NULL;
+
+    int ref_was_set = 0;
+
+    char ref[4096] = "1 2 3 1 4 2 5 1 2 3 4";
 
     if (cmd == NULL)
         return;
 
+    /*
+     * Parse PageSim arguments.
+     */
     for (int i = 1; i < cmd->argc; i++) {
 
         /*
          * Number of frames.
          */
         if (strcmp(cmd->argv[i], "--frames") == 0) {
-
             if (i + 1 >= cmd->argc) {
                 printf("pagesim: missing value for --frames\n");
                 return;
             }
 
-            frames = atoi(cmd->argv[++i]);
+            char *end = NULL;
+            long value = strtol(cmd->argv[++i], &end, 10);
 
-            if (frames <= 0) {
-                printf("pagesim: frames must be greater than 0\n");
+            if (end == cmd->argv[i] ||
+                *end != '\0' ||
+                value <= 0 ||
+                value > 64) {
+                printf(
+                    "pagesim: frames must be between 1 and 64\n"
+                );
                 return;
             }
+
+            frames = (int)value;
         }
 
         /*
-         * Replacement algorithm.
+         * Replacement algorithm or analysis mode.
          */
         else if (strcmp(cmd->argv[i], "--algo") == 0) {
-
             if (i + 1 >= cmd->argc) {
                 printf("pagesim: missing value for --algo\n");
                 return;
@@ -264,49 +250,101 @@ static void run_pagesim(Command *cmd)
         }
 
         /*
-         * Reference string.
+         * Working-set window size.
+         */
+        else if (strcmp(cmd->argv[i], "--window") == 0) {
+            if (i + 1 >= cmd->argc) {
+                printf("pagesim: missing value for --window\n");
+                return;
+            }
+
+            char *end = NULL;
+            long value = strtol(cmd->argv[++i], &end, 10);
+
+            if (end == cmd->argv[i] ||
+                *end != '\0' ||
+                value < 1 ||
+                value > 256) {
+                printf(
+                    "pagesim: window must be between 1 and 256\n"
+                );
+                return;
+            }
+
+            window_size = (int)value;
+        }
+
+        /*
+         * Read reference data from a trace file.
+         */
+        else if (strcmp(cmd->argv[i], "--trace") == 0) {
+            if (i + 1 >= cmd->argc) {
+                printf(
+                    "pagesim: missing file path for --trace\n"
+                );
+                return;
+            }
+
+            if (trace_path != NULL) {
+                printf(
+                    "pagesim: --trace specified more than once\n"
+                );
+                return;
+            }
+
+            trace_path = cmd->argv[++i];
+        }
+
+        /*
+         * Read references from command-line arguments.
          *
-         * We join every remaining argument because the shell
-         * parser may split:
-         *
-         * "1 2 3 1 4 2 5"
-         *
-         * into multiple argv entries.
+         * --ref consumes all remaining arguments.
          */
         else if (strcmp(cmd->argv[i], "--ref") == 0) {
-
             if (i + 1 >= cmd->argc) {
                 printf("pagesim: missing value for --ref\n");
                 return;
             }
 
+            if (ref_was_set) {
+                printf(
+                    "pagesim: --ref specified more than once\n"
+                );
+                return;
+            }
+
+            ref_was_set = 1;
             ref[0] = '\0';
 
-            i++;
+            for (i++; i < cmd->argc; i++) {
+                size_t used = strlen(ref);
+                size_t available = sizeof(ref) - used - 1;
+                size_t length = strlen(cmd->argv[i]);
+                size_t separator = used > 0 ? 1U : 0U;
 
-            for (; i < cmd->argc; i++) {
-
-                if (ref[0] != '\0') {
-                    strncat(
-                        ref,
-                        " ",
-                        sizeof(ref) - strlen(ref) - 1
+                if (length + separator > available) {
+                    printf(
+                        "pagesim: reference string is too long\n"
                     );
+                    return;
                 }
 
-                strncat(
-                    ref,
+                if (separator)
+                    ref[used++] = ' ';
+
+                memcpy(
+                    ref + used,
                     cmd->argv[i],
-                    sizeof(ref) - strlen(ref) - 1
+                    length + 1
                 );
             }
 
-            /*
-             * --ref consumes the remaining arguments.
-             */
             break;
         }
 
+        /*
+         * Unknown option.
+         */
         else {
             printf(
                 "pagesim: unknown option: %s\n",
@@ -314,29 +352,98 @@ static void run_pagesim(Command *cmd)
             );
 
             printf(
-                "Usage: pagesim [--frames N] "
-                "[--algo ALGORITHM] "
-                "[--ref \"PAGE PAGE PAGE ...\"]\n"
+                "Usage: pagesim [--frames N] [--algo ALGORITHM] "
+                "[--window N] "
+                "[--trace FILE | --ref \"PAGE PAGE PAGE ...\"]\n"
             );
 
             return;
         }
     }
 
+    /*
+     * Do not allow both reference input methods.
+     */
+    if (trace_path != NULL && ref_was_set) {
+        printf(
+            "pagesim: use either --trace or --ref, not both\n"
+        );
+        return;
+    }
+
+    /*
+     * Load the trace file.
+     */
+    if (trace_path != NULL) {
+        FILE *fp = fopen(trace_path, "r");
+
+        if (fp == NULL) {
+            perror("pagesim: cannot open trace file");
+            return;
+        }
+
+        size_t used = 0;
+        char line[512];
+
+        ref[0] = '\0';
+
+        while (fgets(line, sizeof(line), fp) != NULL) {
+            size_t length = strlen(line);
+
+            if (length > sizeof(ref) - used - 1) {
+                printf("pagesim: trace file is too large\n");
+                fclose(fp);
+                return;
+            }
+
+            memcpy(ref + used, line, length + 1);
+            used += length;
+        }
+
+        if (ferror(fp)) {
+            perror("pagesim: error reading trace file");
+            fclose(fp);
+            return;
+        }
+
+        fclose(fp);
+
+        if (used == 0) {
+            printf("pagesim: trace file is empty\n");
+            return;
+        }
+    }
+
+    /*
+     * Display the command configuration.
+     */
     printf("\n");
     printf("====================================\n");
     printf("          ShellForge PageSim\n");
     printf("====================================\n");
     printf("Algorithm : %s\n", algo);
     printf("Frames    : %d\n", frames);
-    printf("Reference : %s\n", ref);
+
+    if (trace_path != NULL)
+        printf("Trace file: %s\n", trace_path);
+    else
+        printf("Reference : %s\n", ref);
+
     printf("------------------------------------\n");
 
-    pagesim_run(frames, algo, ref);
+    /*
+     * IMPORTANT:
+     * pagesim.h must declare pagesim_run with four arguments.
+     */
+    pagesim_run(
+        frames,
+        algo,
+        ref,
+        window_size
+    );
 
     printf("------------------------------------\n");
 }
-
 
 /*
  * ============================================================
@@ -347,7 +454,6 @@ static void run_pagesim(Command *cmd)
 static void run_builtin(Command *cmd)
 {
     if (strcmp(cmd->argv[0], "pwd") == 0) {
-
         char cwd[1024];
 
         if (getcwd(cwd, sizeof(cwd)) != NULL)
@@ -357,9 +463,7 @@ static void run_builtin(Command *cmd)
     }
 
     else if (strcmp(cmd->argv[0], "echo") == 0) {
-
         for (int i = 1; i < cmd->argc; i++) {
-
             printf("%s", cmd->argv[i]);
 
             if (i < cmd->argc - 1)
@@ -370,7 +474,6 @@ static void run_builtin(Command *cmd)
     }
 
     else if (strcmp(cmd->argv[0], "cd") == 0) {
-
         const char *path;
 
         if (cmd->argc < 2)
@@ -386,7 +489,6 @@ static void run_builtin(Command *cmd)
     }
 
     else if (strcmp(cmd->argv[0], "help") == 0) {
-
         printf("ShellForge builtins:\n");
         printf("  cd       Change directory\n");
         printf("  pwd      Print working directory\n");
@@ -399,21 +501,44 @@ static void run_builtin(Command *cmd)
 
         printf("\nPageSim usage:\n");
         printf("  pagesim\n");
-        printf("  pagesim --frames 3 --algo fifo --ref \"1 2 3 1 4 2 5\"\n");
-        printf("\nPageSim algorithms:\n");
+        printf(
+            "  pagesim --frames 3 --algo fifo "
+            "--ref \"1 2 3 1 4 2 5\"\n"
+        );
+        printf(
+            "  pagesim --frames 3 --algo fifo "
+            "--trace traces/basic.txt\n"
+        );
+        printf(
+            "  pagesim --algo working-set --window 3 "
+            "--trace traces/basic.txt\n"
+        );
+        printf(
+            "  pagesim --frames 3 --algo compare "
+            "--trace traces/basic.txt\n"
+        );
+        printf(
+            "  pagesim --frames 4 --algo anomaly "
+            "--trace traces/basic.txt\n"
+        );
+
+        printf("\nPageSim algorithms and modes:\n");
         printf("  fifo\n");
         printf("  lru\n");
         printf("  lfu\n");
+        printf("  clock\n");
+        printf("  hybrid\n");
         printf("  optimal\n");
+        printf("  compare\n");
+        printf("  anomaly\n");
+        printf("  working-set\n");
     }
 
     else if (strcmp(cmd->argv[0], "jobs") == 0) {
-
         print_jobs();
     }
 
     else if (strcmp(cmd->argv[0], "fg") == 0) {
-
         if (cmd->argc < 2) {
             printf("fg: usage: fg <job>\n");
             return;
@@ -425,28 +550,23 @@ static void run_builtin(Command *cmd)
             job_arg++;
 
         char *endptr;
-
         long job_id = strtol(job_arg, &endptr, 10);
 
         if (*job_arg == '\0' || *endptr != '\0') {
-            printf("fg: invalid job: %s\n", cmd->argv[1]);
+            printf(
+                "fg: invalid job: %s\n",
+                cmd->argv[1]
+            );
             return;
         }
 
         run_foreground_job((int)job_id);
     }
 
-    /*
-     * ========================================================
-     * PAGESIM
-     * ========================================================
-     */
     else if (strcmp(cmd->argv[0], "pagesim") == 0) {
-
         run_pagesim(cmd);
     }
 }
-
 
 /*
  * ============================================================
@@ -481,16 +601,9 @@ void execute_command(Command *cmd)
     }
 
     /*
-     * ========================================================
      * CHILD
-     * ========================================================
      */
     if (pid == 0) {
-
-        /*
-         * ShellForge ignores these signals.
-         * Children must restore normal behavior.
-         */
         restore_child_signals();
 
         /*
@@ -508,37 +621,30 @@ void execute_command(Command *cmd)
     }
 
     /*
-     * ========================================================
      * PARENT
-     * ========================================================
      *
      * Put child into its own process group too.
      */
     if (setpgid(pid, pid) == -1) {
-
         if (errno != EACCES && errno != ESRCH)
             perror("setpgid");
     }
 
     /*
-     * ========================================================
-     * BACKGROUND
-     * ========================================================
+     * BACKGROUND JOB
      */
     if (cmd->background) {
-
         char command[256];
-
         command[0] = '\0';
 
         for (int i = 0; i < cmd->argc; i++) {
-
-            if (i > 0)
+            if (i > 0) {
                 strncat(
                     command,
                     " ",
                     sizeof(command) - strlen(command) - 1
                 );
+            }
 
             strncat(
                 command,
@@ -564,19 +670,14 @@ void execute_command(Command *cmd)
     }
 
     /*
-     * ========================================================
-     * FOREGROUND
-     * ========================================================
+     * FOREGROUND JOB
      */
-
-    if (tcsetpgrp(STDIN_FILENO, pid) == -1) {
+    if (tcsetpgrp(STDIN_FILENO, pid) == -1)
         perror("shellforge: tcsetpgrp");
-    }
 
     int status;
 
     while (1) {
-
         pid_t result = waitpid(
             pid,
             &status,
@@ -584,7 +685,6 @@ void execute_command(Command *cmd)
         );
 
         if (result == -1) {
-
             if (errno == EINTR)
                 continue;
 
@@ -596,23 +696,17 @@ void execute_command(Command *cmd)
          * Ctrl+Z stopped the foreground process.
          */
         if (WIFSTOPPED(status)) {
-
-            /*
-             * Create a job entry because this
-             * foreground process is now stopped.
-             */
             char command[256];
-
             command[0] = '\0';
 
             for (int i = 0; i < cmd->argc; i++) {
-
-                if (i > 0)
+                if (i > 0) {
                     strncat(
                         command,
                         " ",
                         sizeof(command) - strlen(command) - 1
                     );
+                }
 
                 strncat(
                     command,
@@ -624,7 +718,6 @@ void execute_command(Command *cmd)
             int job_id = add_job(pid, command);
 
             if (job_id > 0) {
-
                 Job *job = get_job(job_id);
 
                 if (job != NULL)
@@ -637,11 +730,7 @@ void execute_command(Command *cmd)
                 );
             }
 
-            /*
-             * Give terminal back immediately.
-             */
             give_terminal_to_shell();
-
             return;
         }
 
@@ -649,12 +738,8 @@ void execute_command(Command *cmd)
             break;
     }
 
-    /*
-     * Foreground command finished.
-     */
     give_terminal_to_shell();
 }
-
 
 /*
  * ============================================================
@@ -684,7 +769,6 @@ void execute_pipeline(Pipeline *pipeline)
      * Create all pipes.
      */
     for (int i = 0; i < pipe_count; i++) {
-
         if (pipe(&pipefds[i * 2]) == -1) {
             perror("pipe");
             return;
@@ -697,11 +781,9 @@ void execute_pipeline(Pipeline *pipeline)
      * Create pipeline processes.
      */
     for (int i = 0; i < pipeline->count; i++) {
-
         pids[i] = fork();
 
         if (pids[i] < 0) {
-
             perror("fork");
 
             for (int j = 0; j < 2 * pipe_count; j++)
@@ -714,26 +796,21 @@ void execute_pipeline(Pipeline *pipeline)
         }
 
         /*
-         * ====================================================
          * CHILD
-         * ====================================================
          */
         if (pids[i] == 0) {
-
             restore_child_signals();
 
             /*
              * First process becomes process-group leader.
              */
             if (i == 0) {
-
                 if (setpgid(0, 0) == -1) {
                     perror("setpgid");
                     _exit(127);
                 }
             }
             else {
-
                 if (setpgid(0, pgid) == -1) {
                     perror("setpgid");
                     _exit(127);
@@ -741,10 +818,9 @@ void execute_pipeline(Pipeline *pipeline)
             }
 
             /*
-             * Connect stdin to previous pipe.
+             * Connect stdin to the previous pipe.
              */
             if (i > 0) {
-
                 int read_fd = pipefds[(i - 1) * 2];
 
                 if (dup2(read_fd, STDIN_FILENO) == -1) {
@@ -754,10 +830,9 @@ void execute_pipeline(Pipeline *pipeline)
             }
 
             /*
-             * Connect stdout to next pipe.
+             * Connect stdout to the next pipe.
              */
             if (i < pipeline->count - 1) {
-
                 int write_fd = pipefds[i * 2 + 1];
 
                 if (dup2(write_fd, STDOUT_FILENO) == -1) {
@@ -785,25 +860,18 @@ void execute_pipeline(Pipeline *pipeline)
         }
 
         /*
-         * ====================================================
-         * PARENT
-         * ====================================================
+         * PARENT: set process group.
          */
-
         if (i == 0) {
-
             pgid = pids[i];
 
             if (setpgid(pids[i], pgid) == -1) {
-
                 if (errno != EACCES && errno != ESRCH)
                     perror("setpgid");
             }
         }
         else {
-
             if (setpgid(pids[i], pgid) == -1) {
-
                 if (errno != EACCES && errno != ESRCH)
                     perror("setpgid");
             }

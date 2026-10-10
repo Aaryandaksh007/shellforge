@@ -20,3 +20,6 @@ ls
 *.before-*
 core
 core.*
+
+# Local PageSim backups
+src/pagesim/*-backup
