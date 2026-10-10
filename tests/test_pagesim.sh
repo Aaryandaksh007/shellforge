@@ -100,6 +100,25 @@ for trace in traces/loop.txt traces/frequency.txt; do
         'Optimal[[:space:]]+[0-9]+[[:space:]]+[0-9]+'
 done
 
+
+echo
+echo "=== AWSF phase-shift regression ==="
+
+output=$(run_shell \
+    "pagesim --frames 3 --algo compare --trace traces/phase-shift.txt")
+
+assert_row "Phase shift LFU: 6 faults" "$output" \
+    'LFU[[:space:]]+9[[:space:]]+6'
+
+assert_row "Phase shift Hybrid: 6 faults" "$output" \
+    'Hybrid[[:space:]]+9[[:space:]]+6'
+
+assert_row "Phase shift AWSF: 5 faults" "$output" \
+    'AWSF[[:space:]]+10[[:space:]]+5'
+
+assert_row "Phase shift Optimal: 5 faults" "$output" \
+    'Optimal[[:space:]]+10[[:space:]]+5'
+
 echo "=== Document Benchmark A ==="
 
 output=$(run_shell \
