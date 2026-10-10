@@ -23,3 +23,6 @@ core.*
 
 # Local PageSim backups
 src/pagesim/*-backup
+
+# Generated PageSim benchmark results
+benchmark_results.csv
